@@ -1,82 +1,122 @@
-import os
 import streamlit as st
-import requests
-import datetime
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from io import BytesIO
 import random
-import saheli.ai_be as backend
+import datetime
 
+st.set_page_config(page_title="Saheli.ai", page_icon="🌸", layout="centered")
 
-# ---- BACKEND STARTUP: LOAD ANY SAVED CHUNKS (optional)
-backend.load_chunks_from_disk()
+# ---------------- SESSION MEMORY ----------------
+if "chat" not in st.session_state:
+    st.session_state.chat = []
 
+if "journal" not in st.session_state:
+    st.session_state.journal = []
 
-# Streamlit UI
-st.set_page_config(page_title="Saheli.ai", page_icon=":herb:", layout="centered")
+# ---------------- HEADER ----------------
+st.title("🌸 Saheli.ai")
+st.write("Your AI-Powered Student Emotional Companion")
+st.write("Talk freely. I listen without judging.")
 
-st.title("Saheli.ai")
-st.write(" Your AI-Powered Student Emotional Companion")
-st.write("Talk to an empathetic AI for emotional support and well-being tips.")
+# ---------------- MOOD + JOURNAL ----------------
+st.sidebar.header("🧠 Feelings Corner")
 
-# Mood Tracking & Journaling
-st.sidebar.header(" Feelings Corner ")
-mood = st.sidebar.selectbox("How do you feel today?", ["Happy", "Stressed", "Anxious", "Sad"])
-journal_entry = st.sidebar.text_area("Write about your day...")
+mood = st.sidebar.selectbox(
+    "How do you feel today?",
+    ["Happy","Stressed","Anxious","Sad","Overwhelmed","Lonely"]
+)
 
-# Save Journal Entry
-if st.sidebar.button("Save Journal Entry"):
-    date = datetime.datetime.now().strftime("%Y-%m-%d")
-    with open("journal.txt", "a") as file:
-        file.write(f"{date} - Mood: {mood}\n{journal_entry}\n\n")
-    st.sidebar.success("Entry saved!")
+entry = st.sidebar.text_area("Write about your day")
 
-# View Saved Journal Entries
-st.sidebar.header(" Past Journal Entries")
-if os.path.exists("journal.txt"):
-    with open("journal.txt", "r") as file:
-        journal_logs = file.readlines()
-        if journal_logs:
-            st.sidebar.text_area("Previous Entries", "".join(journal_logs), height=200)
-        else:
-            st.sidebar.write("No journal entries yet.")
-else:
-    st.sidebar.write("No journal entries found.")
+if st.sidebar.button("Save Entry"):
+    date = datetime.datetime.now().strftime("%d %b %Y")
+    st.session_state.journal.append(f"{date} — {mood}: {entry}")
+    st.sidebar.success("Saved safely")
 
-# Upload PDF Files
-st.header("📂 Upload Mental Health Documents")
-uploaded_file = st.file_uploader("Upload file(s) (e.g., therapy guides, self-help books)", type=["txt", "pdf", "docx"], accept_multiple_files=True)
-if uploaded_file:
-    if st.button("Process Upload"):
-        result_msg = backend.process_files(uploaded_file)  # Updated function name
-        st.success(result_msg)
+st.sidebar.subheader("Past Entries")
+for e in st.session_state.journal[-5:]:
+    st.sidebar.write("•", e)
 
-# AI Chat Section
-st.header(" Talk to Saheli ")
-user_input = st.text_area("How are you feeling? Share your thoughts.")
+# ---------------- RESPONSE ENGINE ----------------
+def detect_topic(text):
+    text=text.lower()
 
-if st.button("Get AI Support"):
-    if user_input:
-        response = backend.answer_user_query(user_input)
-        # response = chat_with_ai(user_input, mood)
-        st.subheader("AI Response:")
-        st.write(response)
-    else:
-        st.warning("Please enter a message.")
+    if any(w in text for w in ["exam","marks","cgpa","assignment","study"]):
+        return "academic"
+    if any(w in text for w in ["placement","internship","career"]):
+        return "career"
+    if any(w in text for w in ["alone","lonely","ignored"]):
+        return "lonely"
+    if any(w in text for w in ["breakup","relationship","crush"]):
+        return "relationship"
+    if any(w in text for w in ["panic","anxiety","scared"]):
+        return "panic"
+    return "general"
 
-# Guided Meditation & Relaxation
-st.header(":herb: Guided Meditation & Relaxation")
-st.write("Click below to start a short guided meditation.")
-if st.button("Start 5-Minute Meditation"):
-    st.video("https://www.youtube.com/watch?v=inpok4MKVLM")  
+def generate_reply(msg):
+    topic = detect_topic(msg)
 
-# Daily Wellness Tip
-st.sidebar.header(" Daily Wellness Tip")
-tips = [
-    "Take a 10-minute walk outside to clear your mind.",
-    "Practice deep breathing exercises for stress relief.",
-    "Write down three things you're grateful for today.",
-    "Drink plenty of water and stay hydrated!"
+    replies={
+        "academic":[
+            "Exams feel heavy sometimes. Let’s break it into one small step — what subject worries you?",
+            "You don’t have to solve everything today. Start small."
+        ],
+        "career":[
+            "Everyone’s timeline is different. You are not behind.",
+            "Placements don’t define your capability."
+        ],
+        "lonely":[
+            "I’m here with you. Want to tell me what happened?",
+            "Feeling left out hurts. When did this start?"
+        ],
+        "relationship":[
+            "Mixed signals can be confusing. What part hurt you most?",
+            "Your feelings are valid here."
+        ],
+        "panic":[
+            "Take a slow breath with me… inhale 4 seconds… exhale slowly.",
+            "You’re safe right now. Stay with me."
+        ],
+        "general":[
+            "I’m listening. Tell me more.",
+            "You can share anything here."
+        ]
+    }
+
+    return random.choice(replies[topic])
+
+# ---------------- CHAT UI ----------------
+st.header("💬 Talk to Saheli")
+
+for role,msg in st.session_state.chat:
+    with st.chat_message(role):
+        st.write(msg)
+
+user_input = st.chat_input("Type your thoughts...")
+
+if user_input:
+    st.session_state.chat.append(("user",user_input))
+    with st.chat_message("user"):
+        st.write(user_input)
+
+    reply = generate_reply(user_input)
+
+    st.session_state.chat.append(("assistant",reply))
+    with st.chat_message("assistant"):
+        st.write(reply)
+
+# ---------------- WELLNESS ----------------
+st.header("🌿 Relaxation Space")
+
+if st.button("Start 1-minute calm exercise"):
+    st.write("Breathe in 4 sec → Hold 4 sec → Exhale 6 sec (repeat 5 times)")
+
+st.video("https://www.youtube.com/watch?v=inpok4MKVLM")
+
+# ---------------- DAILY TIP ----------------
+tips=[
+"Drink water and stretch for 2 minutes.",
+"Step outside sunlight for 5 minutes.",
+"Write one worry and one solution.",
+"Message someone you trust."
 ]
+st.sidebar.header("Daily Tip")
 st.sidebar.write(random.choice(tips))

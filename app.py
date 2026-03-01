@@ -1,113 +1,82 @@
+import os
 import streamlit as st
+import requests
+import datetime
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from io import BytesIO
 import random
+import saheli.ai_be as backend
 
-st.set_page_config(page_title="Saheli.ai", page_icon="🌸")
 
-# ---------------- MEMORY ----------------
-if "chat" not in st.session_state:
-    st.session_state.chat = []
-if "last_topic" not in st.session_state:
-    st.session_state.last_topic = None
+# ---- BACKEND STARTUP: LOAD ANY SAVED CHUNKS (optional)
+backend.load_chunks_from_disk()
 
-# ---------------- DETECT CONTEXT ----------------
-def detect_context(text):
-    text = text.lower()
 
-    categories = {
-        "academic": ["exam","marks","fail","cgpa","assignment","viva","study","backlog"],
-        "career": ["placement","internship","resume","career","future","job"],
-        "lonely": ["alone","lonely","ignored","friends","left out","nobody"],
-        "relationship": ["crush","breakup","relationship","texted","reply","seen"],
-        "panic": ["panic","anxiety","scared","can't breathe","heart racing"],
-        "family": ["parents","pressure","expectations","home","family"],
-    }
+# Streamlit UI
+st.set_page_config(page_title="Saheli.ai", page_icon=":herb:", layout="centered")
 
-    for topic, words in categories.items():
-        if any(w in text for w in words):
-            return topic
-    return "general"
+st.title("Saheli.ai")
+st.write(" Your AI-Powered Student Emotional Companion")
+st.write("Talk to an empathetic AI for emotional support and well-being tips.")
 
-# ---------------- RESPONSE ENGINE ----------------
-def generate_reply(msg):
-    topic = detect_context(msg)
-    st.session_state.last_topic = topic
+# Mood Tracking & Journaling
+st.sidebar.header(" Feelings Corner ")
+mood = st.sidebar.selectbox("How do you feel today?", ["Happy", "Stressed", "Anxious", "Sad"])
+journal_entry = st.sidebar.text_area("Write about your day...")
 
-    responses = {
-        "academic": [
-            "That sounds stressful… academics can pile up quickly. What subject is worrying you the most?",
-            "You don’t have to fix everything tonight. One small step counts — which topic feels manageable right now?",
-            "Marks don’t define you, but I understand why they feel heavy. What part of it scares you most?"
-        ],
-        "career": [
-            "It feels scary when everyone seems ahead. Careers rarely follow a straight line though.",
-            "Comparison hurts more than failure sometimes. Are you worried about skills or opportunities?",
-            "Many students feel lost before finding direction — what path were you hoping for?"
-        ],
-        "lonely": [
-            "Feeling left out can be really painful. Do you want to tell me what happened?",
-            "Sometimes we’re surrounded by people but still feel alone. When did this start?",
-            "I’m here with you. Was it something someone did or just a feeling building up?"
-        ],
-        "relationship": [
-            "Mixed signals confuse the mind a lot. What part bothered you most?",
-            "Uncertainty in relationships drains energy. Are you overthinking their actions?",
-            "Your feelings matter here — what were you hoping from them?"
-        ],
-        "panic": [
-            "Stay with me. Take a slow breath in… hold… and release slowly.",
-            "You’re okay right now. Try unclenching your jaw and relax your shoulders.",
-            "Focus on 5 things you can see around you — grounding helps the mind settle."
-        ],
-        "family": [
-            "Family expectations can feel heavy. Do you feel understood by them?",
-            "It’s hard when love comes with pressure. What are they expecting from you?",
-            "Sometimes we carry guilt even when trying our best. Want to talk about it?"
-        ],
-        "general": [
-            "I’m listening. Tell me more about what’s been on your mind.",
-            "You can share anything here — what’s bothering you today?",
-            "Hmm… what part of this is affecting you the most?"
-        ]
-    }
+# Save Journal Entry
+if st.sidebar.button("Save Journal Entry"):
+    date = datetime.datetime.now().strftime("%Y-%m-%d")
+    with open("journal.txt", "a") as file:
+        file.write(f"{date} - Mood: {mood}\n{journal_entry}\n\n")
+    st.sidebar.success("Entry saved!")
 
-    reply = random.choice(responses[topic])
+# View Saved Journal Entries
+st.sidebar.header(" Past Journal Entries")
+if os.path.exists("journal.txt"):
+    with open("journal.txt", "r") as file:
+        journal_logs = file.readlines()
+        if journal_logs:
+            st.sidebar.text_area("Previous Entries", "".join(journal_logs), height=200)
+        else:
+            st.sidebar.write("No journal entries yet.")
+else:
+    st.sidebar.write("No journal entries found.")
 
-    # follow-up awareness
-    if topic == st.session_state.get("last_topic"):
-        reply += "\n\nYou mentioned something similar earlier — has it been bothering you for a while?"
+# Upload PDF Files
+st.header("📂 Upload Mental Health Documents")
+uploaded_file = st.file_uploader("Upload file(s) (e.g., therapy guides, self-help books)", type=["txt", "pdf", "docx"], accept_multiple_files=True)
+if uploaded_file:
+    if st.button("Process Upload"):
+        result_msg = backend.process_files(uploaded_file)  # Updated function name
+        st.success(result_msg)
 
-    return reply
+# AI Chat Section
+st.header(" Talk to Saheli ")
+user_input = st.text_area("How are you feeling? Share your thoughts.")
 
-# ---------------- UI ----------------
-st.title("🌸 Saheli.ai")
-st.caption("A supportive companion for college students")
+if st.button("Get AI Support"):
+    if user_input:
+        response = backend.answer_user_query(user_input)
+        # response = chat_with_ai(user_input, mood)
+        st.subheader("AI Response:")
+        st.write(response)
+    else:
+        st.warning("Please enter a message.")
 
-# display chat
-for role, msg in st.session_state.chat:
-    with st.chat_message(role):
-        st.write(msg)
+# Guided Meditation & Relaxation
+st.header(":herb: Guided Meditation & Relaxation")
+st.write("Click below to start a short guided meditation.")
+if st.button("Start 5-Minute Meditation"):
+    st.video("https://www.youtube.com/watch?v=inpok4MKVLM")  
 
-# user input
-user_input = st.chat_input("Talk to Saheli...")
-
-if user_input:
-    st.session_state.chat.append(("user", user_input))
-    with st.chat_message("user"):
-        st.write(user_input)
-
-    reply = generate_reply(user_input)
-
-    st.session_state.chat.append(("assistant", reply))
-    with st.chat_message("assistant"):
-        st.write(reply)
-
-# sidebar
-st.sidebar.title("Saheli Care Tools")
-
-if st.sidebar.button("🧘 Calm Me"):
-    st.sidebar.write("Breathe in 4 sec → Hold 4 sec → Exhale 6 sec. Repeat slowly.")
-
-if st.sidebar.button("📝 Vent Out"):
-    st.sidebar.write("Write freely. No one is judging you here.")
-
-st.sidebar.write("Saheli provides emotional support — not a medical substitute.")
+# Daily Wellness Tip
+st.sidebar.header(" Daily Wellness Tip")
+tips = [
+    "Take a 10-minute walk outside to clear your mind.",
+    "Practice deep breathing exercises for stress relief.",
+    "Write down three things you're grateful for today.",
+    "Drink plenty of water and stay hydrated!"
+]
+st.sidebar.write(random.choice(tips))
